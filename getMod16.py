@@ -15,17 +15,17 @@ import matplotlib.pyplot as plt
 ##------------------------------------------------------------------------------
 sys.path.append('C:\\Users\\karunakar.kintada\\AppData\\Local\\Programs\\Python\\Python38-32\\Scripts')
 import gdal_merge as gm
-
+import gdal_calc as gc
 ##------------------------------------------------------------------------------
 
-basePath = "https://e4ftl01.cr.usgs.gov/MOLT/MOD16A2.006/"
+basePath = "https://e4ftl01.cr.usgs.gov/MOLT/MOD13Q1.006/"
 gridCodes = ["h31v12","h31v13"]
 regBoundBox = [176,-40.5,178,-38.5]
 uname = 'karunakar.kintada@gmail.com'
 pwd = 'Jeypore!00'
 
 ##------------------------------------------------------------------------------
-existHDF = glob.glob('MOD16A2.*.hdf')
+existHDF = glob.glob('MOD13Q1.*.hdf')
 #print('files on disk')
 #print(existHDF)
 
@@ -69,15 +69,15 @@ def fetchHDF(fName,webPath):
         print(fName,'fetch')
         url_earthdata = s.request('get', webPath+fName)
         #print(url_earthdata.url)
-        stream_Mod16 = requests.get(url_earthdata.url,auth=HTTPBasicAuth(uname,pwd), stream=True)
+        stream_mod13 = requests.get(url_earthdata.url,auth=HTTPBasicAuth(uname,pwd), stream=True)
 
         downloaded_file = open(fName, "wb")
-        for chunk in stream_Mod16.iter_content(chunk_size=256):
+        for chunk in stream_mod13.iter_content(chunk_size=256):
             if chunk:
                 downloaded_file.write(chunk)
                 downloaded_file.flush()
         downloaded_file.close()
-        #print(url_Mod16File.text)
+        #print(url_mod13File.text)
 
 def hdf2Tiff(fName):
     print(fName,'h2t')
@@ -85,7 +85,7 @@ def hdf2Tiff(fName):
     if src_hdf is None:
         print('kk: GDAL failed to open '+fName)
     else:
-        src_band = gdal.Open(src_hdf.GetSubDatasets()[2][0], gdal.GA_ReadOnly) #2 is 3 band PET, check GDALinfo
+        src_band = gdal.Open(src_hdf.GetSubDatasets()[0][0], gdal.GA_ReadOnly) #0 is 1st subdataset NDVI PET, check GDALinfo
         dst = gdal.Translate(fName[:-4]+'_PET.tiff',src_band,format="GTiff")
         dst = None
 
@@ -106,63 +106,13 @@ def clip2Region(fName):
     wgsFile = None
     return fName[:-4]+"wgs84.tiff"
 
-def modRogierMod16(fName,month):
-    print(fName,'rw')
-    
-    mSlope = [0.88,1.12,1.31,1.28,1.06,0.93,0.87,1.05,1.25,1.02,0.8,0.7]
-    cOffset = [17.53,7.42,1.16,1.68,3.08,3.42,3.68,2.58,0.65,7.11,16.24,23.21]
-
-    month = month-1
-    #1.    
-    tiff_file = gdal.Open(fName)
-    #2.
-    geotransform = tiff_file.GetGeoTransform()
-    projection = tiff_file.GetProjection()
-    band = tiff_file.GetRasterBand(1)    
-    xsize = band.XSize
-    ysize = band.YSize
-    #3.
-    array = band.ReadAsArray()
-    tiff_file = None #close it
-    band = None #close it
-    #4.
-    ##array = (array*0.1)*mSlope[month]+cOffset[month] #0.1 is indication of MOD16 PET scale factor
-    array = ((array*0.1)-cOffset[month])/mSlope[month] #inversion
-    #plt.matshow(array)
-    #plt.show()
-    #5.
-    driver = gdal.GetDriverByName('GTiff')
-    new_tiff = driver.Create('RW-'+fName[:-5]+'.tiff',xsize,ysize,1,gdal.GDT_Int16)
-    new_tiff.SetGeoTransform(geotransform)
-    new_tiff.SetProjection(projection)
-    new_tiff.GetRasterBand(1).WriteArray(array)
-    new_tiff.FlushCache() #Saves to disk 
-    new_tiff = None #closes the file
-    return 'RW-'+fName
-
-def modKKModRWMod16(fName):
-    print(fName,'kk')
-    tiff_file = gdal.Open(fName)
-    geotransform = tiff_file.GetGeoTransform()
-    projection = tiff_file.GetProjection()
-    band = tiff_file.GetRasterBand(1)    
-    xsize = band.XSize
-    ysize = band.YSize
-    array = band.ReadAsArray()
-    tiff_file = None #close it
-    band = None #close it
-    array = array/1.33 #8:85
-    driver = gdal.GetDriverByName('GTiff')
-    new_tiff = driver.Create('KK-'+fName[:-5]+'.tiff',xsize,ysize,1,gdal.GDT_Int16)
-    new_tiff.SetGeoTransform(geotransform)
-    new_tiff.SetProjection(projection)
-    new_tiff.GetRasterBand(1).WriteArray(array)
-    new_tiff.FlushCache() #Saves to disk 
-    new_tiff = None #closes the file
-    return 'KK-'+fName
+def scaleTiff(fName):
+    print(fName,'normalise')
+    gc.Calc("A*0.0001", A=fName, outfile='c-'+fName, NoDataValue=-9999.0, type='Float32')
+    return 'c-'+fName
 
 def extractValidation(ini):
-    collectedPETfiles = glob.glob(ini+'-MOD16A2.*.merged.wgs84.tiff')
+    collectedPETfiles = glob.glob(ini+'-MOD13Q1.*.merged.wgs84.tiff')
     
     with open('stations.txt','r') as f:
         temp = f.readlines()
@@ -214,8 +164,7 @@ def runProc(yr,mon):
 
         fName = mergeSameDayTiffs(files2Download)
         fName = clip2Region(fName)
-        fName = modRogierMod16(fName,int(mon))
-        fName = modKKModRWMod16(fName)
+        fName = scaleTiff(fName)
 
 ##---------------------------------------------------
 if __name__ == "__main__":
