@@ -18,23 +18,20 @@ import matplotlib.pyplot as plt
 baseUrl='https://data.hbrc.govt.nz/Envirodata/EMAR.hts?'
 def guagingSites():
 	measurement = 'Stage%20[Gauging%20Results]'
-	apiExt = 'Service=Hilltop&Request=SiteList&Location=Yes&Measurement='+measurement
+	apiExt = (
+		f'Service=Hilltop&Request=SiteList&Location=Yes&Measurement={measurement}'
+	)
 	#slist = pd.read_xml(baseUrl+urllib.parse.quote_plus(apiExt))
 	slist = pd.read_xml(baseUrl+apiExt)
 	slist.replace('None',float('nan'),inplace=True)
 	slist.dropna(subset=['Name'],inplace=True)
-	siteList = slist['Name'].values
-	#print(siteList)
-	return siteList
+	return slist['Name'].values
 
 def line_format(label):
-    """
+	"""
     Convert time label to the format of pandas line plot
     """
-    month = label.month_name()[:2] + str(label.year)[-2:]
-    #if month == 'J':
-    #    month += f'\n{label.year}'
-    return month
+	return label.month_name()[:2] + str(label.year)[-2:]
 
 
 def powlaw(x, a, b, c) :
@@ -64,62 +61,60 @@ def curve_fit_pow(xdata, ydata) :
     return (popt_pow, pcov_pow, xdata, ydatafit)
 
 def getGaugings(site,sDate,eDate):
-    global baseUrl
-    apiExt = 'Service=Hilltop&Request=GetData&Measurement=Stage%20[Gauging%20Results]'
-    apiExt += '&To='+str(eDate)+'&Interval=1%20hour&method=Average&Site='
-    apiExt1 = apiExt + site.replace(' ','%20')
-    #print(baseUrl+apiExt1)
-    if sDate != None:
-        apiExt += '&From='+str(sDate)
-    
-    #print(baseUrl+apiExt1)
-    #print(baseUrl+apiExt1)
-    #df = pd.read_xml(baseUrl+apiExt1)
-    #display(df)
-    
-    response = requests.get(baseUrl+apiExt1)
-    root = ET.fromstring(response.text)
-    thisData = {}
-    myColumns = {}
-    myDivisor = {}
-    for child in root:
-        for thisChild in child:
-            if thisChild.tag == 'DataSource':
-                for children in thisChild:
-                    temp = list(children.attrib.keys())
-                    if len(temp)>0:
-                        #print(children.attrib[temp[0]])
-                        colKey = children.attrib[temp[0]]
-                        if children.tag == 'ItemInfo':
-                            for data in children:
-                                if data.tag == 'ItemName':
-                                    colVal = data.text #string
-                                if data.tag == 'Divisor':
-                                    divVal = float(data.text) #number
-                        myColumns[int(colKey)] = colVal
-                        myDivisor[int(colKey)] = divVal
-                pass
-            if thisChild.tag == 'Data':
-                for children in thisChild:
-                    temp = []
-                    for data in children:
-                        if data.tag == 'T':
-                            key = data.text
-                        else:
-                            temp.append(float(data.text))
-                    if len(temp) > 0:
-                        thisData[key] = temp
-    
-    myDivisor[0] = 1 #have to do it for that unknown column
-    myDf = pd.DataFrame(data=thisData).T
-    myDf = myDf.apply(lambda x: x/myDivisor[x.name])
-    myDf.rename(columns=myColumns,inplace=True)
-    myDf.index.name = 'timestamp'
-    myDf.index = pd.to_datetime(myDf.index)
-    display(myDf)
-    myDf.plot(y='Flow',logy=True)
-    plt.show()
-    return myDf
+	global baseUrl
+	apiExt = 'Service=Hilltop&Request=GetData&Measurement=Stage%20[Gauging%20Results]'
+	apiExt += f'&To={str(eDate)}&Interval=1%20hour&method=Average&Site='
+	apiExt1 = apiExt + site.replace(' ','%20')
+	    #print(baseUrl+apiExt1)
+	if sDate != None:
+		apiExt += f'&From={str(sDate)}'
+
+	#print(baseUrl+apiExt1)
+	#print(baseUrl+apiExt1)
+	#df = pd.read_xml(baseUrl+apiExt1)
+	#display(df)
+
+	response = requests.get(baseUrl+apiExt1)
+	root = ET.fromstring(response.text)
+	thisData = {}
+	myColumns = {}
+	myDivisor = {}
+	for child in root:
+		for thisChild in child:
+			if thisChild.tag == 'DataSource':
+				for children in thisChild:
+					if temp := list(children.attrib.keys()):
+						#print(children.attrib[temp[0]])
+						colKey = children.attrib[temp[0]]
+						if children.tag == 'ItemInfo':
+							for data in children:
+								if data.tag == 'Divisor':
+									divVal = float(data.text) #number
+								elif data.tag == 'ItemName':
+									colVal = data.text #string
+						myColumns[int(colKey)] = colVal
+						myDivisor[int(colKey)] = divVal
+			if thisChild.tag == 'Data':
+				for children in thisChild:
+					temp = []
+					for data in children:
+					    if data.tag == 'T':
+					        key = data.text
+					    else:
+					        temp.append(float(data.text))
+					if temp:
+						thisData[key] = temp
+
+	myDivisor[0] = 1 #have to do it for that unknown column
+	myDf = pd.DataFrame(data=thisData).T
+	myDf = myDf.apply(lambda x: x/myDivisor[x.name])
+	myDf.rename(columns=myColumns,inplace=True)
+	myDf.index.name = 'timestamp'
+	myDf.index = pd.to_datetime(myDf.index)
+	display(myDf)
+	myDf.plot(y='Flow',logy=True)
+	plt.show()
+	return myDf
     
 def myStageFn(site,sDate,eDate,samples=33):
     myDf = getGaugings(site,sDate,eDate)

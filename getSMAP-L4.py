@@ -94,77 +94,77 @@ def getBaseLinks(url,yr,mon):
     try:
         html_page = urlopen(url).read()
         soup = BeautifulSoup(html_page,features="html.parser")
-        links = []
-
-        #print(soup.findAll('a'))
-        for link in soup.findAll('a', attrs={'href': re.compile(str(yr)+"."+str(mon).zfill(2))}):
-            links.append(link.get('href'))
-            #print(link)
-
-        return links
-
+        return [
+            link.get('href')
+            for link in soup.findAll(
+                'a',
+                attrs={'href': re.compile(f"{str(yr)}.{str(mon).zfill(2)}")},
+            )
+        ]
     except Exception as e:
         print(e)
 
 def getHdfLinks(url):
-    print('listing available h5 at '+url)
+    print(f'listing available h5 at {url}')
     try:
         html_page = urlopen(url).read()
         soup = BeautifulSoup(html_page,features="html.parser")
-        links = []
-
-        #print(soup.findAll('a'))
-        for link in soup.findAll('a', attrs={'href': re.compile('.h5.html'), 'itemprop': True}):
-            links.append(link.get('href')[:-5])
-                
-        return links
-
+        return [
+            link.get('href')[:-5]
+            for link in soup.findAll(
+                'a', attrs={'href': re.compile('.h5.html'), 'itemprop': True}
+            )
+        ]
     except Exception as e:
         print(e)
 
 def getCellLatLon(url):
-    print('fetching (once) lat lon to build the grids '+url)
+    print(f'fetching (once) lat lon to build the grids {url}')
     try:
-            thsIndices = queryParam.split('[')
+        thsIndices = queryParam.split('[')
             #print(thsIndices)
-            html_page = urlopen(url+'.ascii?cell_lon['+thsIndices[1]+'['+thsIndices[2]).read()
-            soup = BeautifulSoup(html_page,features="html.parser")
-            #print(soup.contents)
-            lonData = []
-            for ele in soup.contents :
-                if ele.find(','):
-                    ele = ele.replace(',','')
-                if ele.find('\n'):
-                    subEle = ele.split('\n')
-                    lonData.extend(subEle)
-                else:
-                    lonData.append(ele)
+        html_page = urlopen(
+            f'{url}.ascii?cell_lon[{thsIndices[1]}[{thsIndices[2]}'
+        ).read()
+        soup = BeautifulSoup(html_page,features="html.parser")
+        #print(soup.contents)
+        lonData = []
+        for ele in soup.contents :
+            if ele.find(','):
+                ele = ele.replace(',','')
+            if ele.find('\n'):
+                subEle = ele.split('\n')
+                lonData.extend(subEle)
+            else:
+                lonData.append(ele)
             #print((lonData[1].split())[1:])
 
-            html_page = urlopen(url+'.ascii?cell_lat['+thsIndices[1]+'['+thsIndices[2]).read()
-            soup = BeautifulSoup(html_page,features="html.parser")
-            #print(soup.contents)
-            latData = []
-            for ele in soup.contents :
-                if ele.find(','):
-                    ele = ele.replace(',','')
-                if ele.find('\n'):
-                    subEle = ele.split('\n')
-                    latData.extend(subEle)
-                else:
-                    latData.append(ele)
-            latData = latData[1:]
-            if latData[len(latData)-1] == '' :
-                latData = latData[:-1]
+        html_page = urlopen(
+            f'{url}.ascii?cell_lat[{thsIndices[1]}[{thsIndices[2]}'
+        ).read()
+        soup = BeautifulSoup(html_page,features="html.parser")
+        #print(soup.contents)
+        latData = []
+        for ele in soup.contents :
+            if ele.find(','):
+                ele = ele.replace(',','')
+            if ele.find('\n'):
+                subEle = ele.split('\n')
+                latData.extend(subEle)
+            else:
+                latData.append(ele)
+        latData = latData[1:]
+        if latData[len(latData)-1] == '' :
+            latData = latData[:-1]
 
-            #print(latData)
+        #print(latData)
 
-            return [(lonData[1].split())[1:],[ (x.split())[1] for x in latData ] ]
+        return [(lonData[1].split())[1:],[ (x.split())[1] for x in latData ] ]
     except Exception as e:
         print(e)
 
 def getSMAProotZone(url):
-    html_page = urlopen(url+'.ascii?'+queryParam)
+    html_page = urlopen(f'{url}.ascii?{queryParam}')
     soup = BeautifulSoup(html_page,features="html.parser")
     smData = []
     for ele in soup.contents :
@@ -182,7 +182,7 @@ def getSMAProotZone(url):
 
     buff = [ x.split() for x in smData]
     #print(buff)
-    
+
     return [ x[1:] for x in buff ]
 
 def buildTiff(lonLat,smGrid,target):
@@ -191,7 +191,7 @@ def buildTiff(lonLat,smGrid,target):
     #print(path,fd)
     try:
         #with os.fdopen(fd, 'w') as tmp:
-        tpath = target[:-14]+'.csv'
+        tpath = f'{target[:-14]}.csv'
         with open(tpath,'w') as tmp:
             tmp.write('lon,lat,Z\n')
             for i, x in enumerate(smGrid): #iter over lat
@@ -199,7 +199,10 @@ def buildTiff(lonLat,smGrid,target):
                     if y == '-9999':
                         smGrid[i][j] = float('NaN')
                     # do stuff with temp file
-                    tmp.write(str(lonLat[0][j])+','+str(lonLat[1][i])+','+str(smGrid[i][j])+'\n')
+                    tmp.write(
+                        f'{str(lonLat[0][j])},{str(lonLat[1][i])},{str(smGrid[i][j])}'
+                        + '\n'
+                    )
                     tmp.flush()
             tmp.close()
 
@@ -211,7 +214,7 @@ def buildTiff(lonLat,smGrid,target):
         #conversion circus
         #build a vrt file
         #with os.fdopen(fd1, 'w') as tmp:
-        vpath = target[:-14]+'.vrt'
+        vpath = f'{target[:-14]}.vrt'
         with open(vpath,'w') as tmp:
             tmp.write('<OGRVRTDataSource>\n')
             tmp.write('\t<OGRVRTLayer name="'+target[:-14]+'">\n')
@@ -224,14 +227,14 @@ def buildTiff(lonLat,smGrid,target):
             tmp.flush()
             tmp.close()
 
-        cpath = target[:-14]+'.csvt'
+        cpath = f'{target[:-14]}.csvt'
         with open(cpath,'w') as tmp:
             tmp.write('"Real","Real","Real"')
             tmp.flush()
             tmp.close()
-            
+
         gridopt = gdal.GridOptions(format='GTiff',algorithm='linear:nodata=-9999:')
-        output = gdal.Grid(target[:-14]+'.tif', vpath, options=gridopt)  
+        output = gdal.Grid(f'{target[:-14]}.tif', vpath, options=gridopt)
     except Exception as e:
         print(e,' error')
     #finally:

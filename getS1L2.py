@@ -59,12 +59,17 @@ def getBaseLinks(url,yr,mon,dat):
     try:
         html_page = urlopen(url)
         soup = BeautifulSoup(html_page,features="html.parser")
-        links = []
-
-        #print(soup.findAll('a'))
-        for link in soup.findAll('a', attrs={'href': re.compile(str(yr)+"."+str(mon).zfill(2)+"."+str(dat).zfill(2))}):
-            links.append(link.get('href'))
-
+        links = [
+            link.get('href')
+            for link in soup.findAll(
+                'a',
+                attrs={
+                    'href': re.compile(
+                        f"{str(yr)}.{str(mon).zfill(2)}.{str(dat).zfill(2)}"
+                    )
+                },
+            )
+        ]
         #print(links)
         return list(dict.fromkeys(links))
 
@@ -78,31 +83,31 @@ def getHdfLinks(url):
         links = []
 
         #print(soup.findAll('a'))
-        for gridCode in gridCodes :
-            for link in soup.findAll('a', attrs={'href': re.compile(gridCode)}):
-                #print(link.get('href'))
-                if (link.get('href'))[-2:] == 'h5':
-                    #return link.get('href')
-                    links.append(link.get('href'))
-
+        for gridCode in gridCodes:
+            links.extend(
+                link.get('href')
+                for link in soup.findAll(
+                    'a', attrs={'href': re.compile(gridCode)}
+                )
+                if (link.get('href'))[-2:] == 'h5'
+            )
         return list(dict.fromkeys(links))
 
     except Exception as e:
         print(e)
 
 def fetchHDF(fName,webPath):
-    Response = urlopen(webPath+'/'+fName)
+    Response = urlopen(f'{webPath}/{fName}')
 
-    downloaded_file = open(fName, "wb")
-    downloaded_file.write(Response.read())
-    downloaded_file.close()
+    with open(fName, "wb") as downloaded_file:
+        downloaded_file.write(Response.read())
 
 
 def hdf2Tiff(fName):
     print(fName,' h2t')
     src_hdf = gdal.Open(fName, gdal.GA_ReadOnly)
     if src_hdf is None:
-        print('h2tif: GDAL failed to open '+fName)
+        print(f'h2tif: GDAL failed to open {fName}')
     else:
         src_band = gdal.Open(src_hdf.GetSubDatasets()[32][0], gdal.GA_ReadOnly)
         src_mat = src_band.ReadAsArray()
@@ -128,40 +133,48 @@ def hdf2Tiff(fName):
         #sticking to iteration, gives us some time not to hit servers immediately and get banned
         with open("temp.csv",'w') as f:
             f.writelines('lon,lat,sm\n')
-            for row in range(0,len(src_mat)):
-                for col in range(0,len(src_mat[1])):
-                    f.writelines(str(lon_mat[row][col])+','+str(lat_mat[row][col])+','+str(src_mat[row][col])+'\n')
+            for row in range(len(src_mat)):
+                for col in range(len(src_mat[1])):
+                    f.writelines(
+                        f'{str(lon_mat[row][col])},{str(lat_mat[row][col])},{str(src_mat[row][col])}'
+                        + '\n'
+                    )
             f.flush()
-            
+
         #grid it, takes care of the distortions at higher latitudes
         gridopt = gdal.GridOptions(format='GTiff',algorithm='linear:nodata=-9999.0:')
-        output = gdal.Grid(fName[:-3]+'.tif', 'temp.vrt', options=gridopt)
+        output = gdal.Grid(f'{fName[:-3]}.tif', 'temp.vrt', options=gridopt)
         #output = gdal.Grid('temp.tif', 'temp.vrt', options=gridopt)
         #output = None
         #gc.Calc("(A>0)*A+(A<=0)*-9999", A='temp.tif',outfile=fName[:-3]+'.tif')#can't do it unless output is flushed tricky
 
 def mergeSameDayTiffs(fileNameList):
-    if(len(fileNameList)>1):
+    if (len(fileNameList)>1):
         #print(fileNameList)
         print((fileNameList[0])[:-45],' msd')
-        for  mfile in fileNameList:
-            gc.Calc("(A>0)*A+(A<=0)*-9999", A=mfile[:-3]+'.tif',outfile=mfile[:-3]+'_f.tif',NoDataValue=-9999.0)
-        fileNameString = [x[:-3]+'_f.tif' for x in fileNameList]
+        for mfile in fileNameList:
+            gc.Calc(
+                "(A>0)*A+(A<=0)*-9999",
+                A=f'{mfile[:-3]}.tif',
+                outfile=f'{mfile[:-3]}_f.tif',
+                NoDataValue=-9999.0,
+            )
+        fileNameString = [f'{x[:-3]}_f.tif' for x in fileNameList]
 ##        cmdString = ['',"-o", (fileNameList[0])[:-45]+"_merged.tiff","-n -9999"]
 ##        print(fileNameString)
 ##        cmdString.extend(fileNameString)
 ##        #print(cmdString)
 ##        gm.main(cmdString)
-        ds = gdal.Warp(fileNameList[0][:-45]+"_merged.tif",fileNameString)
+        ds = gdal.Warp(f"{fileNameList[0][:-45]}_merged.tif", fileNameString)
         ds = None
-        return (fileNameList[0])[:-45]+"_merged.tif"
+        return f"{fileNameList[0][:-45]}_merged.tif"
     else:
         print('single file')
 
 def extractValidation(ini):
     collectedPETfiles = glob.glob('*_merged.tif')
-    print('have to loop through '+len(collectedPETfiles)+' files')
-    
+    print(f'have to loop through {len(collectedPETfiles)} files')
+
     with open('stations.txt','r') as f:
         temp = f.readlines()
         stns = [line.split() for line in temp]
@@ -174,17 +187,14 @@ def extractValidation(ini):
             #print(result)
             try:
                 result = float(result)
-                if result > 1 :
-                    result = '-9999'
-                else :
-                    result = str(result)
+                result = '-9999' if result > 1 else str(result)
             except ValueError:
                 result = '-9999'
 
             if(ini == 'raw'):
                 fmtdDate = fName[21:30]
             with open(stn[0],'a') as f:
-                f.write(str(fmtdDate)+','+result+'\n')    #fName[12:19]
+                f.write(f'{str(fmtdDate)},{result}' + '\n')
                 f.flush()
 
 def runProc(yr,mon,dat):
@@ -192,23 +202,25 @@ def runProc(yr,mon,dat):
     subDirs = getBaseLinks(basePath,yr,mon,dat)
     print('files for select month')
     print(subDirs)
-    
-    for subDir in subDirs :
+
+    for subDir in subDirs:
         files2Download = getHdfLinks(basePath+subDir)
         #print(files2Download)
         for fName in files2Download:
             if fName in str(existHDF):
-                print(fName+' exists on disks: kk')
+                print(f'{fName} exists on disks: kk')
             else:
                 fetchHDF(fName,basePath+subDir)
 
             #make it to TIFF
             hdf2Tiff(fName)
 
-        if(len(files2Download)>1):
+        if (len(files2Download)>1):
             fName = mergeSameDayTiffs(files2Download)
-        elif(len(files2Download)==1):
-            os.popen(' copy '+files2Download[0][:-37]+' '+files2Download[0][:-37]+'merged.tif')
+        elif (len(files2Download)==1):
+            os.popen(
+                f' copy {files2Download[0][:-37]} {files2Download[0][:-37]}merged.tif'
+            )
 
 ##---------------------------------------------------
 if __name__ == "__main__":

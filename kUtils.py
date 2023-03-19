@@ -6,12 +6,11 @@ import sys
 from datetime import timedelta
 
 def gapFinder(thisDf,timeColumn='timestamp',Debug=False):
-    if True:
-        #print(sys.modules)
+    #print(sys.modules)
     #if 'numpy' not in sys.modules:
-        import numpy as np
+    import numpy as np
     #if 'pandas' not in sys.modules:
-        import pandas as pd
+    import pandas as pd
     if Debug:
         print('finding gaps')
     #find datagaps
@@ -25,7 +24,7 @@ def gapFinder(thisDf,timeColumn='timestamp',Debug=False):
     fGapDf = pd.DataFrame(gaps)
     fGapDf['endDate'] = redDf[timeColumn][gaps.index]
     fGapDf.rename(columns = {timeColumn:'gapDays'}, inplace=True)
-    
+
     fGapDf['startDate'] = fGapDf['endDate']-fGapDf['gapDays']
     fGapDf = fGapDf[['startDate','gapDays']]
     return fGapDf

@@ -35,14 +35,13 @@ def getBaseLinks(url,yr,mon):
     try:
         html_page = urlopen(url)
         soup = BeautifulSoup(html_page,features="html.parser")
-        links = []
-
-        #print(soup.findAll('a'))
-        for link in soup.findAll('a', attrs={'href': re.compile(str(yr)+"."+str(mon).zfill(2))}):
-            links.append(link.get('href'))
-
-        return links
-
+        return [
+            link.get('href')
+            for link in soup.findAll(
+                'a',
+                attrs={'href': re.compile(f"{str(yr)}.{str(mon).zfill(2)}")},
+            )
+        ]
     except Exception as e:
         print(e)
 
@@ -53,12 +52,14 @@ def getHdfLinks(url):
         links = []
 
         #print(soup.findAll('a'))
-        for gridCode in gridCodes :
-            for link in soup.findAll('a', attrs={'href': re.compile(gridCode)}):
-                if (link.get('href'))[-3:] == 'hdf':
-                    #return link.get('href')
-                    links.append(link.get('href'))
-
+        for gridCode in gridCodes:
+            links.extend(
+                link.get('href')
+                for link in soup.findAll(
+                    'a', attrs={'href': re.compile(gridCode)}
+                )
+                if (link.get('href'))[-3:] == 'hdf'
+            )
         return links
 
     except Exception as e:
@@ -71,49 +72,53 @@ def fetchHDF(fName,webPath):
         #print(url_earthdata.url)
         stream_mod13 = requests.get(url_earthdata.url,auth=HTTPBasicAuth(uname,pwd), stream=True)
 
-        downloaded_file = open(fName, "wb")
-        for chunk in stream_mod13.iter_content(chunk_size=256):
-            if chunk:
-                downloaded_file.write(chunk)
-                downloaded_file.flush()
-        downloaded_file.close()
+        with open(fName, "wb") as downloaded_file:
+            for chunk in stream_mod13.iter_content(chunk_size=256):
+                if chunk:
+                    downloaded_file.write(chunk)
+                    downloaded_file.flush()
         #print(url_mod13File.text)
 
 def hdf2Tiff(fName):
     print(fName,'h2t')
     src_hdf = gdal.Open(fName, gdal.GA_ReadOnly)
     if src_hdf is None:
-        print('kk: GDAL failed to open '+fName)
+        print(f'kk: GDAL failed to open {fName}')
     else:
         src_band = gdal.Open(src_hdf.GetSubDatasets()[0][0], gdal.GA_ReadOnly) #0 is 1st subdataset NDVI PET, check GDALinfo
-        dst = gdal.Translate(fName[:-4]+'_PET.tiff',src_band,format="GTiff")
+        dst = gdal.Translate(f'{fName[:-4]}_PET.tiff', src_band, format="GTiff")
         dst = None
 
 def mergeSameDayTiffs(fileNameList):
     print((fileNameList[0])[:-28],'msd')
-    cmdString = ['',"-o", (fileNameList[0])[:-28]+"merged.tiff"]
-    fileNameString = [x[:-4]+'_PET.tiff' for x in fileNameList]
-    cmdString.extend(fileNameString)
+    fileNameString = [f'{x[:-4]}_PET.tiff' for x in fileNameList]
+    cmdString = ['', "-o", f"{fileNameList[0][:-28]}merged.tiff", *fileNameString]
     #print(cmdString)
     gm.main(cmdString)
-    return (fileNameList[0])[:-28]+"merged.tiff"
+    return f"{fileNameList[0][:-28]}merged.tiff"
 
 def clip2Region(fName):
     print(fName,'clip')
     pixSize = 0.00892857142857143/2 #degrees
     options = gdal.WarpOptions(dstSRS='EPSG:4326', xRes=pixSize, yRes=pixSize, outputType=gdal.GDT_Int16, outputBoundsSRS='EPSG:4326', outputBounds=regBoundBox)
-    wgsFile = gdal.Warp(fName[:-4]+"wgs84.tiff", fName, options=options) #
+    wgsFile = gdal.Warp(f"{fName[:-4]}wgs84.tiff", fName, options=options)
     wgsFile = None
-    return fName[:-4]+"wgs84.tiff"
+    return f"{fName[:-4]}wgs84.tiff"
 
 def scaleTiff(fName):
     print(fName,'normalise')
-    gc.Calc("A*0.0001", A=fName, outfile='c-'+fName, NoDataValue=-9999.0, type='Float32')
-    return 'c-'+fName
+    gc.Calc(
+        "A*0.0001",
+        A=fName,
+        outfile=f'c-{fName}',
+        NoDataValue=-9999.0,
+        type='Float32',
+    )
+    return f'c-{fName}'
 
 def extractValidation(ini):
-    collectedPETfiles = glob.glob(ini+'-MOD13Q1.*.merged.wgs84.tiff')
-    
+    collectedPETfiles = glob.glob(f'{ini}-MOD13Q1.*.merged.wgs84.tiff')
+
     with open('stations.txt','r') as f:
         temp = f.readlines()
         stns = [line.split() for line in temp]
@@ -126,23 +131,20 @@ def extractValidation(ini):
             #print(result)
             try:
                 result = float(result)
-                if result > 1000 :
-                    result = '-999'
-                else :
-                    result = str(result)
+                result = '-999' if result > 1000 else str(result)
             except ValueError:
                 result = '-999'
 
-            if(ini == 'KK-RW'):
+            if ini == 'KK-RW':
                 thisYear = int(fName[15:19])
                 thisDate = int(fName[19:22])
-            if(ini == 'RW'):
+            elif ini == 'RW':
                 thisYear = int(fName[12:16])
                 thisDate = int(fName[16:19])
-            print(thisYear,thisDate)   
-            fmtdDate = datetime.datetime(thisYear, 1, 1) + datetime.timedelta(thisDate - 1)    
+            print(thisYear,thisDate)
+            fmtdDate = datetime.datetime(thisYear, 1, 1) + datetime.timedelta(thisDate - 1)
             with open(stn[0],'a') as f:
-                f.write(str(fmtdDate)+','+result+'\n')    #fName[12:19]
+                f.write(f'{str(fmtdDate)},{result}' + '\n')
                 f.flush()
 
 def runProc(yr,mon):
@@ -150,12 +152,12 @@ def runProc(yr,mon):
     subDirs = getBaseLinks(basePath,yr,mon)
     print('files for select month')
     print(subDirs)
-    
-    for subDir in subDirs :
+
+    for subDir in subDirs:
         files2Download = getHdfLinks(basePath+subDir)
         for fName in files2Download:
             if fName in str(existHDF):
-                print(fName+' exists on disks: kk')
+                print(f'{fName} exists on disks: kk')
             else:
                 fetchHDF(fName,basePath+subDir)
 

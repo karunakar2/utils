@@ -4,7 +4,7 @@ class Tag:
         self.name = name
         self.value = value
     def __repr__(self):
-        return "<%s>%s</%s>"%(self.name, str(self.value), self.name)
+        return f"<{self.name}>{str(self.value)}</{self.name}>"
         
 class Linear:
     def __init__(self, data):
@@ -28,10 +28,10 @@ class Table:
         if self.compiled:
             return self.compiledHTML
         header = Tag("tr", Linear(list(map(lambda x:Tag('th', x), self.header))))
-        contents = []
-        for c in self.contents:
-            contents += [ Tag("tr", Linear(list(map(lambda x:Tag('td', x), c))))]
-        
+        contents = [
+            Tag("tr", Linear(list(map(lambda x: Tag('td', x), c))))
+            for c in self.contents
+        ]
         self.compiledHTML = str(Tag('Table', Linear((header, Linear(contents)))))
         self.compiled = True
         return self.compiledHTML

@@ -3,7 +3,7 @@ import os, subprocess
 
 def extractValidation():
     collectedSM2Rainfiles = glob.glob('daily.rainfall_*_10km.tif')
-    
+
     with open('stations.txt','r') as f:
         temp = f.readlines()
         temp = temp
@@ -17,15 +17,12 @@ def extractValidation():
             #print(result)
             try:
                 result = float(result)
-                if result > 800 :
-                    result = '-999'
-                else :
-                    result = str(result)
+                result = '-999' if result > 800 else str(result)
             except ValueError:
                 result = '-999'
 
-            with open(stn[0]+'.csv','a') as f:
-                f.write(fName[15:25]+','+result+'\n')    #fName[12:19]
+            with open(f'{stn[0]}.csv', 'a') as f:
+                f.write(f'{fName[15:25]},{result}' + '\n')
                 f.flush()
 
 extractValidation()
